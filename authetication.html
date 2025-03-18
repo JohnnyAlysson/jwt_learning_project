@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JWT Authentication Demo</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button.secondary {
+            background-color: #f44336;
+        }
+        button.secondary:hover {
+            background-color: #d32f2f;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .status.success {
+            background-color: #dff0d8;
+            color: #3c763d;
+        }
+        .status.error {
+            background-color: #f2dede;
+            color: #a94442;
+        }
+        .status.info {
+            background-color: #d9edf7;
+            color: #31708f;
+        }
+        pre {
+            background-color: #f8f8f8;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            overflow: auto;
+            max-height: 300px;
+        }
+        .auth-status {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 14px;
+            margin-left: 10px;
+        }
+        .auth-status.logged-in {
+            background-color: #dff0d8;
+            color: #3c763d;
+        }
+        .auth-status.logged-out {
+            background-color: #f2dede;
+            color: #a94442;
+        }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .client-card {
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            background-color: #fff;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>JWT Authentication Demo</h1>
+        <div>
+            <span id="authStatusBadge" class="auth-status logged-out">Logged Out</span>
+        </div>
+    </header>
+
+    <div class="container" id="loginSection">
+        <h2>Login</h2>
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="username">Username:</label>
+                <input type="text" id="username" placeholder="Enter username" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password:</label>
+                <input type="password" id="password" placeholder="Enter password" required>
+            </div>
+            <button type="submit">Login</button>
+        </form>
+        <div id="loginStatus" class="status"></div>
+    </div>
+
+    <div class="container hidden" id="loggedInSection">
+        <h2>API Actions</h2>
+        <div class="form-group">
+            <button id="getHomeBtn">Test Home Route (Public)</button>
+            <button id="getClientsBtn">Get Clients (Protected)</button>
+            <button id="logoutBtn" class="secondary">Logout</button>
+        </div>
+        <div id="apiStatus" class="status"></div>
+        <h3>Response:</h3>
+        <pre id="responseData"></pre>
+
+        <div id="clientsContainer" class="hidden">
+            <h3>Client List:</h3>
+            <div id="clientsList"></div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>JWT Token</h2>
+        <pre id="tokenDisplay">No token</pre>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:3000';
+        
+        const loginForm = document.getElementById('loginForm');
+        const loginStatus = document.getElementById('loginStatus');
+        const loginSection = document.getElementById('loginSection');
+        const loggedInSection = document.getElementById('loggedInSection');
+        const getHomeBtn = document.getElementById('getHomeBtn');
+        const getClientsBtn = document.getElementById('getClientsBtn');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const apiStatus = document.getElementById('apiStatus');
+        const responseData = document.getElementById('responseData');
+        const tokenDisplay = document.getElementById('tokenDisplay');
+        const authStatusBadge = document.getElementById('authStatusBadge');
+        const clientsContainer = document.getElementById('clientsContainer');
+        const clientsList = document.getElementById('clientsList');
+
+        let token = localStorage.getItem('jwt_token');
+        console.log('Application initialized. Checking for existing token...');
+        if (token) {
+            console.log('Token found in localStorage. User is already logged in.');
+            updateAuthStatus(true);
+        } else {
+            console.log('No token found. User needs to log in.');
+        }
+
+        loginForm.addEventListener('submit', handleLogin);
+        getHomeBtn.addEventListener('click', fetchHomeRoute);
+        getClientsBtn.addEventListener('click', fetchClients);
+        logoutBtn.addEventListener('click', handleLogout);
+
+        async function handleLogin(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            console.log(`Login attempt with username: ${username}`);
+            
+            try {
+                setLoading(true);
+                loginStatus.className = 'status info';
+                loginStatus.textContent = 'Logging in...';
+                
+                console.log('Sending login request to server...');
+                const response = await fetch(`${API_BASE_URL}/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        user: username,
+                        password: password
+                    })
+                });
+                
+                console.log(`Server response status: ${response.status}`);
+                const data = await response.json();
+                console.log('Server response data:', data);
+                
+                if (response.ok && data.auth) {
+                    token = data.token;
+                    localStorage.setItem('jwt_token', token);
+                    console.log('Login successful! Token saved to localStorage');
+                    updateTokenDisplay(token);
+                    
+                    loginStatus.className = 'status success';
+                    loginStatus.textContent = 'Login successful!';
+                    
+                    updateAuthStatus(true);
+                    
+                    loginForm.reset();
+                } else {
+                    console.log('Login failed:', data.message);
+                    loginStatus.className = 'status error';
+                    loginStatus.textContent = data.message || 'Login failed. Please check your credentials.';
+                    updateAuthStatus(false);
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                loginStatus.className = 'status error';
+                loginStatus.textContent = `Error: ${error.message}`;
+                updateAuthStatus(false);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function fetchHomeRoute() {
+            console.log('Fetching public home route...');
+            try {
+                setApiStatus('info', 'Fetching public home route...');
+                
+                const response = await fetch(`${API_BASE_URL}/`);
+                console.log(`Home route response status: ${response.status}`);
+                
+                const data = await response.json();
+                console.log('Home route response data:', data);
+                
+                setApiStatus('success', 'Public route accessed successfully');
+                responseData.textContent = JSON.stringify(data, null, 2);
+                clientsContainer.classList.add('hidden');
+            } catch (error) {
+                console.error('Error accessing home route:', error);
+                setApiStatus('error', `Error: ${error.message}`);
+                responseData.textContent = '';
+            }
+        }
+
+        async function fetchClients() {
+            console.log('Fetching protected clients route...');
+            if (!token) {
+                console.log('No token available, cannot access protected route');
+                setApiStatus('error', 'You need to login first');
+                return;
+            }
+            
+            try {
+                setApiStatus('info', 'Fetching clients (protected route)...');
+                
+                console.log(`Sending request with token: ${token.substring(0, 10)}...`);
+                const response = await fetch(`${API_BASE_URL}/cliente`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                console.log(`Clients route response status: ${response.status}`);
+                const data = await response.json();
+                console.log('Clients route response data:', data);
+                
+                if (response.ok) {
+                    console.log('Successfully accessed protected route');
+                    setApiStatus('success', 'Protected route accessed successfully');
+                    responseData.textContent = JSON.stringify(data, null, 2);
+                    
+                    renderClients(data);
+                } else {
+                    console.log('Failed to access protected route:', data.message);
+                    setApiStatus('error', data.message || 'Failed to fetch clients');
+                    responseData.textContent = JSON.stringify(data, null, 2);
+                    
+                    if (response.status === 401) {
+                        console.log('Token is invalid or expired. Logging out...');
+                        handleLogout();
+                    }
+                }
+            } catch (error) {
+                console.error('Error accessing clients route:', error);
+                setApiStatus('error', `Error: ${error.message}`);
+                responseData.textContent = '';
+            }
+        }
+
+        async function handleLogout() {
+            console.log('Logging out...');
+            try {
+                const response = await fetch(`${API_BASE_URL}/logout`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                console.log(`Logout response status: ${response.status}`);
+                const data = await response.json();
+                console.log('Logout response data:', data);
+                
+                localStorage.removeItem('jwt_token');
+                console.log('Token removed from localStorage');
+                token = null;
+                updateTokenDisplay('No token');
+                
+                updateAuthStatus(false);
+                setApiStatus('info', 'Logged out successfully');
+                responseData.textContent = '';
+                clientsContainer.classList.add('hidden');
+            } catch (error) {
+                console.error('Logout error:', error);
+                setApiStatus('error', `Logout error: ${error.message}`);
+                
+                localStorage.removeItem('jwt_token');
+                token = null;
+                updateTokenDisplay('No token');
+                updateAuthStatus(false);
+            }
+        }
+
+        function updateTokenDisplay(token) {
+            console.log('Updating token display');
+            if (token && token !== 'No token') {
+                const tokenStr = token.length > 40 
+                    ? `${token.substring(0, 20)}...${token.substring(token.length - 20)}`
+                    : token;
+                tokenDisplay.textContent = tokenStr;
+            } else {
+                tokenDisplay.textContent = token;
+            }
+        }
+
+        function updateAuthStatus(isLoggedIn) {
+            console.log(`Updating UI for auth status: ${isLoggedIn ? 'logged in' : 'logged out'}`);
+            if (isLoggedIn) {
+                loginSection.classList.add('hidden');
+                loggedInSection.classList.remove('hidden');
+                authStatusBadge.textContent = 'Logged In';
+                authStatusBadge.className = 'auth-status logged-in';
+            } else {
+                loginSection.classList.remove('hidden');
+                loggedInSection.classList.add('hidden');
+                authStatusBadge.textContent = 'Logged Out';
+                authStatusBadge.className = 'auth-status logged-out';
+            }
+        }
+
+        function setApiStatus(type, message) {
+            console.log(`API Status: ${message}`);
+            apiStatus.className = `status ${type}`;
+            apiStatus.textContent = message;
+        }
+
+        function renderClients(clients) {
+            console.log('Rendering client list:', clients);
+            clientsContainer.classList.remove('hidden');
+            clientsList.innerHTML = '';
+            
+            if (Array.isArray(clients)) {
+                clients.forEach(client => {
+                    const clientCard = document.createElement('div');
+                    clientCard.className = 'client-card';
+                    clientCard.innerHTML = `
+                        <strong>ID:</strong> ${client.id}<br>
+                        <strong>Nome:</strong> ${client.nome}<br>
+                        <strong>Password:</strong> ${client.password}
+                    `;
+                    clientsList.appendChild(clientCard);
+                });
+                console.log(`Displayed ${clients.length} clients`);
+            } else {
+                clientsList.innerHTML = '<p>Invalid client data format</p>';
+                console.log('Invalid client data format', clients);
+            }
+        }
+
+        function setLoading(isLoading) {
+            console.log(`Loading state: ${isLoading}`);
+            const submitBtn = loginForm.querySelector('button[type="submit"]');
+            if (isLoading) {
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Logging in...';
+            } else {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Login';
+            }
+        }
+
+        updateTokenDisplay(token || 'No token');
+        console.log('Frontend application fully loaded and ready');
+    </script>
+</body>
+</html>
