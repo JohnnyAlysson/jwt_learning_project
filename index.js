@@ -15,7 +15,7 @@ function verifyJWT(req, res, next){
   const authHeader = req.headers['authorization'];
   if (!authHeader) return res.status(401).json({ auth: false, message: 'No token provided.' });
   
-  const token = authHeader.split(' ')[1];
+  const token = authHeader && authHeader.split(' ')[1];
   if (!token) return res.status(401).json({ auth: false, message: 'Token format invalid.' });
   
   jwt.verify(token, process.env.SECRET, function(err, decoded) {
@@ -36,8 +36,6 @@ app.get('/cliente', verifyJWT ,(req,res,next)=>{
   console.log("Retornou todos clientes!");
   res.json(db.clientes);
 });
-
-
 
 app.post('/login',(req,res,next)=>{
   try{
@@ -67,10 +65,12 @@ app.post('/login',(req,res,next)=>{
 
 })
 
- 
 app.post('/logout', function(req, res) {
-  res.json({ auth: false, token: null });
+ res.json({ auth: false, token: null });
 })
+
+
+
 
 
 app.listen(3000,()=>console.log("Servidor Escutando na porta 3000..."))
