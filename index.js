@@ -69,6 +69,11 @@ app.post('/logout', function(req, res) {
  res.json({ auth: false, token: null });
 })
 
+app.get('*',(req,res,next)=>{
+  console.log("404 - Rota não encontrada!");
+  res.json({message: "404 - Rota não encontrada!"});
+});
+
 
 
 
